@@ -1,0 +1,10 @@
+# Ignore files in input and output folders
+input/*
+output/*
+
+# Keep the folders (optional - add .gitkeep files to these folders if needed)
+!input/.gitkeep
+!output/.gitkeep
+
+# Python cache
+__pycache__/
