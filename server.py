@@ -6,10 +6,10 @@ Web server for the document scanner application.
 Usage:
     python server.py
 
-Then open http://localhost:5000 in your browser.
+Then open http://localhost:5050 in your browser.
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 from werkzeug.utils import secure_filename
 import os
 import cv2
@@ -23,11 +23,14 @@ from datetime import datetime
 from scanner import process_document_from_array, four_point_transform, enhance_document, add_white_border
 from pdf_maker import images_to_pdf
 
-app = Flask(__name__, static_folder='static', template_folder='.')
+# Get the directory where server.py is located
+BASE_DIR = Path(__file__).parent.resolve()
+
+app = Flask(__name__)
 
 # Configuration
-UPLOAD_FOLDER = Path(__file__).parent / 'input'
-OUTPUT_FOLDER = Path(__file__).parent / 'output'
+UPLOAD_FOLDER = BASE_DIR / 'input'
+OUTPUT_FOLDER = BASE_DIR / 'output'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'bmp', 'webp', 'tiff'}
 
 # Ensure folders exist
@@ -45,7 +48,15 @@ def allowed_file(filename):
 @app.route('/')
 def index():
     """Serve the main HTML page"""
-    return render_template('index.html')
+    html_path = BASE_DIR / 'index.html'
+    with open(html_path, 'r', encoding='utf-8') as f:
+        return Response(f.read(), mimetype='text/html')
+
+
+@app.route('/health')
+def health():
+    """Health check endpoint for Render"""
+    return jsonify({'status': 'healthy'})
 
 
 @app.route('/upload', methods=['POST'])
@@ -263,6 +274,35 @@ def clear_scanned():
     """Clear scanned images from memory"""
     scanned_images.clear()
     return jsonify({'success': True})
+
+
+@app.route('/reset-session', methods=['POST'])
+def reset_session():
+    """Reset the entire session - clear all files and memory"""
+    cleaned = 0
+    
+    # Clean input folder
+    for f in UPLOAD_FOLDER.iterdir():
+        if f.is_file():
+            try:
+                os.remove(f)
+                cleaned += 1
+            except Exception as e:
+                print(f"Warning: Could not delete {f}: {e}")
+    
+    # Clean output folder (including PDFs for full reset)
+    for f in OUTPUT_FOLDER.iterdir():
+        if f.is_file():
+            try:
+                os.remove(f)
+                cleaned += 1
+            except Exception as e:
+                print(f"Warning: Could not delete {f}: {e}")
+    
+    # Clear memory
+    scanned_images.clear()
+    
+    return jsonify({'success': True, 'cleaned_files': cleaned})
 
 
 @app.route('/cleanup-all', methods=['POST'])
