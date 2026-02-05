@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Scanner</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#E2E8F0",
+                        "background-light": "#F8FAFC",
+                        "background-dark": "#1A1C1E",
+                        "card-dark": "#2D2F31",
+                        "accent-blue": "#4D96FF",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "1.25rem",
+                        "xl": "1.5rem",
+                        "2xl": "2rem",
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Corner dot styles */
+        .corner-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            position: absolute;
+            cursor: move;
+            transform: translate(-50%, -50%);
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            z-index: 100;
+            transition: transform 0.1s;
+        }
+        .corner-dot:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+        }
+        .corner-dot.tl { background: #22c55e; }
+        .corner-dot.tr { background: #3b82f6; }
+        .corner-dot.br { background: #ef4444; }
+        .corner-dot.bl { background: #eab308; }
+        
+        /* Selection overlay */
+        .selection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        /* Image container */
+        .image-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            max-height: 70vh;
+        }
+        .image-container img {
+            max-width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200">
+    
+    <!-- Header -->
+    <header class="px-6 py-4 flex items-center justify-between sticky top-0 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md z-20 border-b border-slate-200 dark:border-slate-700">
+        <div class="flex items-center gap-3">
+            <span class="material-icons-round text-accent-blue text-2xl">document_scanner</span>
+            <h1 class="text-xl font-bold tracking-tight">Document Scanner</h1>
+        </div>
+        <button onclick="toggleDarkMode()" class="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+            <span class="material-icons-round dark:hidden">dark_mode</span>
+            <span class="material-icons-round hidden dark:block">light_mode</span>
+        </button>
+    </header>
+
+    <main class="px-6 py-6 max-w-6xl mx-auto">
+        
+        <!-- Step Indicator -->
+        <div class="flex items-center justify-center gap-2 mb-6">
+            <div id="step1-indicator" class="flex items-center gap-2 px-4 py-2 rounded-full bg-accent-blue text-white">
+                <span class="material-icons-round text-sm">upload</span>
+                <span class="text-sm font-medium">Upload</span>
+            </div>
+            <span class="material-icons-round text-slate-400">arrow_forward</span>
+            <div id="step2-indicator" class="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500">
+                <span class="material-icons-round text-sm">crop</span>
+                <span class="text-sm font-medium">Select Corners</span>
+            </div>
+            <span class="material-icons-round text-slate-400">arrow_forward</span>
+            <div id="step3-indicator" class="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500">
+                <span class="material-icons-round text-sm">picture_as_pdf</span>
+                <span class="text-sm font-medium">Save PDF</span>
+            </div>
+        </div>
+
+        <!-- Step 1: Upload -->
+        <div id="step1" class="space-y-6">
+            <div class="bg-white dark:bg-card-dark rounded-2xl p-8 border-2 border-dashed border-slate-300 dark:border-slate-600 text-center">
+                <input type="file" id="fileInput" accept="image/*" class="hidden" multiple onchange="handleFileSelect(event)">
+                <div class="space-y-4">
+                    <div class="w-16 h-16 mx-auto bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                        <span class="material-icons-round text-accent-blue text-3xl">cloud_upload</span>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-1">Upload Document Images</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm">Drag and drop or click to select images</p>
+                    </div>
+                    <button onclick="document.getElementById('fileInput').click()" 
+                            class="px-6 py-3 bg-accent-blue text-white rounded-full font-medium hover:bg-blue-600 active:scale-95 transition-all">
+                        <span class="material-icons-round text-sm mr-2 align-middle">add_photo_alternate</span>
+                        Select Images
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Upload Queue -->
+            <div id="uploadQueue" class="hidden space-y-4">
+                <h3 class="font-semibold flex items-center gap-2">
+                    <span class="material-icons-round text-accent-blue">queue</span>
+                    Images to Process
+                </h3>
+                <div id="queueList" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+            </div>
+        </div>
+
+        <!-- Step 2: Corner Selection -->
+        <div id="step2" class="hidden space-y-6">
+            <div class="bg-white dark:bg-card-dark rounded-2xl p-6">
+                <!-- Instructions -->
+                <div class="mb-4 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-xl">
+                    <div class="flex items-start gap-3">
+                        <span class="material-icons-round text-accent-blue">info</span>
+                        <div class="text-sm">
+                            <p class="font-medium mb-1">Drag the corners to select your document</p>
+                            <p class="text-slate-500 dark:text-slate-400">
+                                <span class="inline-block w-3 h-3 rounded-full bg-green-500 mr-1"></span> Top-Left
+                                <span class="inline-block w-3 h-3 rounded-full bg-blue-500 ml-3 mr-1"></span> Top-Right
+                                <span class="inline-block w-3 h-3 rounded-full bg-red-500 ml-3 mr-1"></span> Bottom-Right
+                                <span class="inline-block w-3 h-3 rounded-full bg-yellow-500 ml-3 mr-1"></span> Bottom-Left
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Image with corners -->
+                <div class="flex justify-center mb-4 bg-slate-100 dark:bg-slate-800 rounded-xl p-4 overflow-auto">
+                    <div id="imageContainer" class="image-container">
+                        <img id="sourceImage" src="" alt="Document" onload="initializeCorners()">
+                        <svg id="selectionOverlay" class="selection-overlay">
+                            <polygon id="selectionPolygon" fill="rgba(77, 150, 255, 0.2)" stroke="#4D96FF" stroke-width="2"/>
+                        </svg>
+                        <div id="cornerTL" class="corner-dot tl" data-corner="tl"></div>
+                        <div id="cornerTR" class="corner-dot tr" data-corner="tr"></div>
+                        <div id="cornerBR" class="corner-dot br" data-corner="br"></div>
+                        <div id="cornerBL" class="corner-dot bl" data-corner="bl"></div>
+                    </div>
+                </div>
+                
+                <!-- Image counter -->
+                <div class="text-center text-sm text-slate-500 dark:text-slate-400 mb-4">
+                    Image <span id="currentImageIndex">1</span> of <span id="totalImages">1</span>
+                </div>
+                
+                <!-- Actions -->
+                <div class="flex justify-center gap-4">
+                    <button onclick="resetCorners()" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-700 rounded-full font-medium hover:bg-slate-300 dark:hover:bg-slate-600 active:scale-95 transition-all">
+                        <span class="material-icons-round text-sm mr-1 align-middle">refresh</span>
+                        Reset
+                    </button>
+                    <button onclick="skipImage()" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-700 rounded-full font-medium hover:bg-slate-300 dark:hover:bg-slate-600 active:scale-95 transition-all">
+                        <span class="material-icons-round text-sm mr-1 align-middle">skip_next</span>
+                        Skip
+                    </button>
+                    <button onclick="scanDocument()" class="px-6 py-2.5 bg-accent-blue text-white rounded-full font-medium hover:bg-blue-600 active:scale-95 transition-all">
+                        <span class="material-icons-round text-sm mr-1 align-middle">crop_free</span>
+                        Scan & Next
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Preview & PDF -->
+        <div id="step3" class="hidden space-y-6">
+            <div class="bg-white dark:bg-card-dark rounded-2xl p-6">
+                <h3 class="font-semibold mb-4 flex items-center gap-2">
+                    <span class="material-icons-round text-green-500">check_circle</span>
+                    Scanned Documents
+                </h3>
+                
+                <div id="scannedList" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+                
+                <!-- Actions -->
+                <div class="flex flex-wrap justify-center gap-4">
+                    <button onclick="addMoreImages()" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-700 rounded-full font-medium hover:bg-slate-300 dark:hover:bg-slate-600 active:scale-95 transition-all">
+                        <span class="material-icons-round text-sm mr-1 align-middle">add</span>
+                        Add More Images
+                    </button>
+                    <button onclick="createPDF()" class="px-6 py-2.5 bg-green-500 text-white rounded-full font-medium hover:bg-green-600 active:scale-95 transition-all">
+                        <span class="material-icons-round text-sm mr-1 align-middle">picture_as_pdf</span>
+                        Create PDF
+                    </button>
+                </div>
+            </div>
+            
+            <!-- PDF Result -->
+            <div id="pdfResult" class="hidden bg-white dark:bg-card-dark rounded-2xl p-6">
+                <div class="text-center space-y-4">
+                    <div class="w-16 h-16 mx-auto bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                        <span class="material-icons-round text-green-500 text-3xl">task_alt</span>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold mb-1">PDF Created Successfully!</h3>
+                        <p id="pdfInfo" class="text-slate-500 dark:text-slate-400 text-sm"></p>
+                    </div>
+                    <div class="flex gap-4 justify-center flex-wrap">
+                        <a id="downloadLink" href="#" download class="inline-flex items-center px-6 py-3 bg-accent-blue text-white rounded-full font-medium hover:bg-blue-600 active:scale-95 transition-all">
+                            <span class="material-icons-round text-sm mr-2">download</span>
+                            Download PDF
+                        </a>
+                        <button onclick="startNew()" class="inline-flex items-center px-6 py-3 bg-green-500 text-white rounded-full font-medium hover:bg-green-600 active:scale-95 transition-all">
+                            <span class="material-icons-round text-sm mr-2">restart_alt</span>
+                            Start New
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white dark:bg-card-dark rounded-2xl p-8 text-center">
+            <div class="animate-spin w-12 h-12 border-4 border-accent-blue border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p id="loadingText" class="font-medium">Processing...</p>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let uploadedImages = [];
+        let currentImageIndex = 0;
+        let scannedImages = [];
+        let corners = { tl: null, tr: null, br: null, bl: null };
+        let imageScale = 1;
+        let originalDimensions = { width: 0, height: 0 };
+        let isDragging = false;
+        let activeCorner = null;
+
+        // Dark mode toggle
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        // File handling
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            files.forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    uploadImage(file);
+                }
+            });
+        }
+
+        async function uploadImage(file) {
+            showLoading('Uploading...');
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    uploadedImages.push({
+                        filename: data.filename,
+                        preview: data.preview,
+                        width: data.width,
+                        height: data.height
+                    });
+                    updateUploadQueue();
+                    
+                    if (uploadedImages.length === 1) {
+                        setTimeout(() => goToStep2(), 500);
+                    }
+                } else {
+                    alert('Upload failed: ' + data.error);
+                }
+            } catch (error) {
+                alert('Upload error: ' + error.message);
+            }
+            
+            hideLoading();
+        }
+
+        function updateUploadQueue() {
+            const queue = document.getElementById('uploadQueue');
+            const list = document.getElementById('queueList');
+            
+            if (uploadedImages.length > 0) {
+                queue.classList.remove('hidden');
+                list.innerHTML = uploadedImages.map((img, i) => `
+                    <div class="relative bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden aspect-[3/4]">
+                        <img src="${img.preview}" class="w-full h-full object-cover">
+                        <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                            <span class="text-white text-xs">${i + 1}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                queue.classList.add('hidden');
+            }
+        }
+
+        // Step navigation
+        function goToStep2() {
+            if (uploadedImages.length === 0) return;
+            
+            document.getElementById('step1').classList.add('hidden');
+            document.getElementById('step2').classList.remove('hidden');
+            document.getElementById('step3').classList.add('hidden');
+            
+            updateStepIndicators(2);
+            loadCurrentImage();
+        }
+
+        function goToStep3() {
+            document.getElementById('step1').classList.add('hidden');
+            document.getElementById('step2').classList.add('hidden');
+            document.getElementById('step3').classList.remove('hidden');
+            
+            updateStepIndicators(3);
+            updateScannedList();
+        }
+
+        function updateStepIndicators(step) {
+            const steps = ['step1-indicator', 'step2-indicator', 'step3-indicator'];
+            steps.forEach((id, i) => {
+                const el = document.getElementById(id);
+                if (i + 1 === step) {
+                    el.className = 'flex items-center gap-2 px-4 py-2 rounded-full bg-accent-blue text-white';
+                } else if (i + 1 < step) {
+                    el.className = 'flex items-center gap-2 px-4 py-2 rounded-full bg-green-500 text-white';
+                } else {
+                    el.className = 'flex items-center gap-2 px-4 py-2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-500';
+                }
+            });
+        }
+
+        // Image loading
+        function loadCurrentImage() {
+            if (currentImageIndex >= uploadedImages.length) {
+                goToStep3();
+                return;
+            }
+            
+            const img = uploadedImages[currentImageIndex];
+            document.getElementById('sourceImage').src = img.preview;
+            document.getElementById('currentImageIndex').textContent = currentImageIndex + 1;
+            document.getElementById('totalImages').textContent = uploadedImages.length;
+            
+            originalDimensions = { width: img.width, height: img.height };
+        }
+
+        // Corner initialization
+        function initializeCorners() {
+            const img = document.getElementById('sourceImage');
+            const container = document.getElementById('imageContainer');
+            
+            const displayWidth = img.clientWidth;
+            const displayHeight = img.clientHeight;
+            
+            imageScale = displayWidth / originalDimensions.width;
+            
+            // Set default corners with margin
+            const margin = 30;
+            corners = {
+                tl: { x: margin, y: margin },
+                tr: { x: displayWidth - margin, y: margin },
+                br: { x: displayWidth - margin, y: displayHeight - margin },
+                bl: { x: margin, y: displayHeight - margin }
+            };
+            
+            updateCornerPositions();
+            setupDragListeners();
+        }
+
+        function updateCornerPositions() {
+            ['tl', 'tr', 'br', 'bl'].forEach(corner => {
+                const el = document.getElementById('corner' + corner.toUpperCase());
+                el.style.left = corners[corner].x + 'px';
+                el.style.top = corners[corner].y + 'px';
+            });
+            
+            updateSelectionPolygon();
+        }
+
+        function updateSelectionPolygon() {
+            const polygon = document.getElementById('selectionPolygon');
+            const points = [
+                `${corners.tl.x},${corners.tl.y}`,
+                `${corners.tr.x},${corners.tr.y}`,
+                `${corners.br.x},${corners.br.y}`,
+                `${corners.bl.x},${corners.bl.y}`
+            ].join(' ');
+            polygon.setAttribute('points', points);
+        }
+
+        // Drag handling
+        function setupDragListeners() {
+            ['tl', 'tr', 'br', 'bl'].forEach(corner => {
+                const el = document.getElementById('corner' + corner.toUpperCase());
+                
+                el.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    activeCorner = corner;
+                    e.preventDefault();
+                });
+                
+                el.addEventListener('touchstart', (e) => {
+                    isDragging = true;
+                    activeCorner = corner;
+                    e.preventDefault();
+                });
+            });
+            
+            document.addEventListener('mousemove', handleDrag);
+            document.addEventListener('touchmove', handleDrag);
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                activeCorner = null;
+            });
+            
+            document.addEventListener('touchend', () => {
+                isDragging = false;
+                activeCorner = null;
+            });
+        }
+
+        function handleDrag(e) {
+            if (!isDragging || !activeCorner) return;
+            
+            const container = document.getElementById('imageContainer');
+            const rect = container.getBoundingClientRect();
+            
+            let clientX, clientY;
+            if (e.touches) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+            const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
+            
+            corners[activeCorner] = { x, y };
+            updateCornerPositions();
+        }
+
+        function resetCorners() {
+            initializeCorners();
+        }
+
+        // Scanning
+        async function scanDocument() {
+            showLoading('Scanning...');
+            
+            const img = uploadedImages[currentImageIndex];
+            
+            // Convert display coordinates to original image coordinates
+            const originalCorners = [
+                [corners.tl.x / imageScale, corners.tl.y / imageScale],
+                [corners.tr.x / imageScale, corners.tr.y / imageScale],
+                [corners.br.x / imageScale, corners.br.y / imageScale],
+                [corners.bl.x / imageScale, corners.bl.y / imageScale]
+            ];
+            
+            try {
+                const response = await fetch('/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filename: img.filename,
+                        corners: originalCorners,
+                        enhance: true,
+                        addBorder: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    scannedImages.push({
+                        id: data.scan_id,
+                        filename: data.filename,
+                        preview: data.preview
+                    });
+                    
+                    currentImageIndex++;
+                    loadCurrentImage();
+                } else {
+                    alert('Scan failed: ' + data.error);
+                }
+            } catch (error) {
+                alert('Scan error: ' + error.message);
+            }
+            
+            hideLoading();
+        }
+
+        function skipImage() {
+            currentImageIndex++;
+            loadCurrentImage();
+        }
+
+        // Scanned list
+        function updateScannedList() {
+            const list = document.getElementById('scannedList');
+            list.innerHTML = scannedImages.map((img, i) => `
+                <div class="relative bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden aspect-[3/4]">
+                    <img src="${img.preview}" class="w-full h-full object-cover">
+                    <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+                        <span class="text-white text-xs">Page ${i + 1}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addMoreImages() {
+            document.getElementById('step1').classList.remove('hidden');
+            document.getElementById('step2').classList.add('hidden');
+            document.getElementById('step3').classList.add('hidden');
+            updateStepIndicators(1);
+            document.getElementById('fileInput').click();
+        }
+
+        // PDF creation
+        async function createPDF() {
+            if (scannedImages.length === 0) {
+                alert('No scanned images to create PDF');
+                return;
+            }
+            
+            showLoading('Creating PDF...');
+            
+            try {
+                const response = await fetch('/create-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        scan_ids: scannedImages.map(img => img.id)
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('pdfResult').classList.remove('hidden');
+                    let infoText = `${data.page_count} pages - ${data.filename}`;
+                    if (data.cleaned_files > 0) {
+                        infoText += ` (${data.cleaned_files} temp files cleaned)`;
+                    }
+                    document.getElementById('pdfInfo').textContent = infoText;
+                    document.getElementById('downloadLink').href = `/download/${data.filename}`;
+                    
+                    // Clear the scanned list since files are cleaned
+                    scannedImages = [];
+                    updateScannedList();
+                } else {
+                    alert('PDF creation failed: ' + data.error);
+                }
+            } catch (error) {
+                alert('PDF error: ' + error.message);
+            }
+            
+            hideLoading();
+        }
+
+        // Start new session
+        function startNew() {
+            // Reset all state
+            uploadedImages = [];
+            currentImageIndex = 0;
+            scannedImages = [];
+            corners = { tl: null, tr: null, br: null, bl: null };
+            
+            // Reset UI
+            document.getElementById('uploadQueue').classList.add('hidden');
+            document.getElementById('queueList').innerHTML = '';
+            document.getElementById('scannedList').innerHTML = '';
+            document.getElementById('pdfResult').classList.add('hidden');
+            document.getElementById('fileInput').value = '';
+            
+            // Go to step 1
+            document.getElementById('step1').classList.remove('hidden');
+            document.getElementById('step2').classList.add('hidden');
+            document.getElementById('step3').classList.add('hidden');
+            updateStepIndicators(1);
+        }
+
+        // Loading overlay
+        function showLoading(text) {
+            document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
+        // Drag and drop support
+        document.body.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+
+        document.body.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const files = Array.from(e.dataTransfer.files);
+            files.forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    uploadImage(file);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
